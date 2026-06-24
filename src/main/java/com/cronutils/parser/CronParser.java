@@ -103,21 +103,30 @@ public class CronParser {
         return parsePlainExpression(replaced);
     }
 
+    private Cron resolveNickname(final String expression,
+                                 final Set<CronNicknames> cronNicknames,
+                                 final CronNicknames nickname,
+                                 final Cron cron) {
+        return validateAndReturnSupportedCronNickname(
+                expression, cronNicknames, nickname, cron);
+    }
+
     private Cron parseNickname(final String expression) {
         Set<CronNicknames> cronNicknames = cronDefinition.getCronNicknames();
         if (cronNicknames.isEmpty()) {
             throw new IllegalArgumentException("Nicknames not supported!");
         }
         switch (expression) {
-            case "@yearly":   return validateAndReturnSupportedCronNickname(expression, cronNicknames, CronNicknames.YEARLY,   CronBuilder.yearly(cronDefinition));
-            case "@annually": return validateAndReturnSupportedCronNickname(expression, cronNicknames, CronNicknames.ANNUALLY, CronBuilder.annually(cronDefinition));
-            case "@monthly":  return validateAndReturnSupportedCronNickname(expression, cronNicknames, CronNicknames.MONTHLY,  CronBuilder.monthly(cronDefinition));
-            case "@weekly":   return validateAndReturnSupportedCronNickname(expression, cronNicknames, CronNicknames.WEEKLY,   CronBuilder.weekly(cronDefinition));
-            case "@daily":    return validateAndReturnSupportedCronNickname(expression, cronNicknames, CronNicknames.DAILY,    CronBuilder.daily(cronDefinition));
-            case "@midnight": return validateAndReturnSupportedCronNickname(expression, cronNicknames, CronNicknames.MIDNIGHT, CronBuilder.midnight(cronDefinition));
-            case "@hourly":   return validateAndReturnSupportedCronNickname(expression, cronNicknames, CronNicknames.HOURLY,   CronBuilder.hourly(cronDefinition));
-            case "@reboot":   return validateAndReturnSupportedCronNickname(expression, cronNicknames, CronNicknames.REBOOT,   CronBuilder.reboot(cronDefinition));
-            default: throw new IllegalArgumentException(String.format("Nickname %s not supported!", expression));
+            case "@yearly":   return resolveNickname(expression, cronNicknames, CronNicknames.YEARLY,   CronBuilder.yearly(cronDefinition));
+            case "@annually": return resolveNickname(expression, cronNicknames, CronNicknames.ANNUALLY, CronBuilder.annually(cronDefinition));
+            case "@monthly":  return resolveNickname(expression, cronNicknames, CronNicknames.MONTHLY,  CronBuilder.monthly(cronDefinition));
+            case "@weekly":   return resolveNickname(expression, cronNicknames, CronNicknames.WEEKLY,   CronBuilder.weekly(cronDefinition));
+            case "@daily":    return resolveNickname(expression, cronNicknames, CronNicknames.DAILY,    CronBuilder.daily(cronDefinition));
+            case "@midnight": return resolveNickname(expression, cronNicknames, CronNicknames.MIDNIGHT, CronBuilder.midnight(cronDefinition));
+            case "@hourly":   return resolveNickname(expression, cronNicknames, CronNicknames.HOURLY,   CronBuilder.hourly(cronDefinition));
+            case "@reboot":   return resolveNickname(expression, cronNicknames, CronNicknames.REBOOT,   CronBuilder.reboot(cronDefinition));
+            default: throw new IllegalArgumentException(
+                    String.format("Nickname %s not supported!", expression));
         }
     }
 
