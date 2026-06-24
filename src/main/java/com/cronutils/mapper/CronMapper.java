@@ -97,54 +97,40 @@ public class CronMapper {
      * Creates a CronMapper that maps a cron4j expression to a quartz expression.
      * @return a CronMapper for mapping from cron4j to quartz
      */
-    public static CronMapper fromCron4jToQuartz() {
+    private static CronMapper build(
+            final CronType from,
+            final CronType to,
+            final Function<Cron, Cron> rules) {
+
         return new CronMapper(
-                CronDefinitionBuilder.instanceDefinitionFor(CronType.CRON4J),
-                CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ),
-                setQuestionMark()
+                CronDefinitionBuilder.instanceDefinitionFor(from),
+                CronDefinitionBuilder.instanceDefinitionFor(to),
+                rules
         );
+    }
+    public static CronMapper fromCron4jToQuartz() {
+        return build(CronType.CRON4J, CronType.QUARTZ, setQuestionMark());
     }
 
     public static CronMapper fromQuartzToCron4j() {
-        return new CronMapper(
-                CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ),
-                CronDefinitionBuilder.instanceDefinitionFor(CronType.CRON4J),
-                sameCron()
-        );
+        return build(CronType.QUARTZ, CronType.CRON4J, sameCron());
     }
 
     public static CronMapper fromQuartzToUnix() {
-        return new CronMapper(
-                CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ),
-                CronDefinitionBuilder.instanceDefinitionFor(CronType.UNIX),
-                sameCron()
-        );
+        return build(CronType.QUARTZ, CronType.UNIX, sameCron());
     }
 
     public static CronMapper fromUnixToQuartz() {
-        return new CronMapper(
-                CronDefinitionBuilder.instanceDefinitionFor(CronType.UNIX),
-                CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ),
-                setQuestionMark()
-        );
+        return build(CronType.UNIX, CronType.QUARTZ, setQuestionMark());
     }
 
     public static CronMapper fromQuartzToSpring() {
-        return new CronMapper(
-                CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ),
-                CronDefinitionBuilder.instanceDefinitionFor(CronType.SPRING),
-                setQuestionMark()
-        );
+        return build(CronType.QUARTZ, CronType.SPRING, setQuestionMark());
     }
 
     public static CronMapper fromSpringToQuartz() {
-        return new CronMapper(
-                CronDefinitionBuilder.instanceDefinitionFor(CronType.SPRING),
-                CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ),
-                setQuestionMark()
-        );
+        return build(CronType.SPRING, CronType.QUARTZ, setQuestionMark());
     }
-
     public static CronMapper sameCron(final CronDefinition cronDefinition) {
         return new CronMapper(cronDefinition, cronDefinition, sameCron());
     }
