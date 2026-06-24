@@ -176,10 +176,16 @@ public interface ExecutionTime {
      * @param endDate - End date. If null, a NullPointerException will be raised.
      * @return list of date times
      */
-    default List<ZonedDateTime> getExecutionDates(ZonedDateTime startDate, ZonedDateTime endDate) {
+
+    private void validateDateRange(ZonedDateTime startDate, ZonedDateTime endDate) {
         if (endDate.equals(startDate) || endDate.isBefore(startDate)) {
-            throw new IllegalArgumentException("endDate should take place later in time than startDate");
+            throw new IllegalArgumentException(
+                    "endDate should take place later in time than startDate");
         }
+    }
+
+    default List<ZonedDateTime> getExecutionDates(ZonedDateTime startDate, ZonedDateTime endDate) {
+        validateDateRange(startDate, endDate);
         List<ZonedDateTime> executions = new ArrayList<>();
         ZonedDateTime nextExecutionDate = nextExecution(startDate).orElse(null);
 
