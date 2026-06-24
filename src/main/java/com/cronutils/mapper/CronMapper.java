@@ -278,38 +278,31 @@ public class CronMapper {
         return field -> new CronField(name, always(), FieldConstraintsBuilder.instance().forField(name).createConstraintsInstance());
     }
 
-    private static IntegerFieldValue mapDayOfWeek(DayOfWeekFieldDefinition sourceDef, DayOfWeekFieldDefinition targetDef, IntegerFieldValue fieldValue) {
-        return new IntegerFieldValue(ConstantsMapper.weekDayMapping(sourceDef.getMondayDoWValue(), targetDef.getMondayDoWValue(), fieldValue.getValue()));
-    }
-
-    private static FieldValue<?> mapDayOfWeek(DayOfWeekFieldDefinition sourceDef, DayOfWeekFieldDefinition targetDef, FieldValue<?> fieldValue) {
-        if (fieldValue instanceof IntegerFieldValue) {
-            return mapDayOfWeek(sourceDef, targetDef, (IntegerFieldValue) fieldValue);
-        }
-        return fieldValue;
-    }
-
     @VisibleForTesting
     static Function<CronField, CronField> dayOfWeekMapping(final DayOfWeekFieldDefinition sourceDef, final DayOfWeekFieldDefinition targetDef) {
+        final DayOfWeekMapping mapping = new DayOfWeekMapping(sourceDef, targetDef);
+
         return field -> {
             final FieldExpression expression = field.getExpression();
-            FieldExpression dest = null;
-            dest = expression.accept(new FieldExpressionVisitorAdaptor() {
+
+            FieldExpression dest = expression.accept(new FieldExpressionVisitorAdaptor() {
                 @Override
                 public FieldExpression visit(Every every) {
                     return new Every(every.getExpression().accept(this), every.getPeriod());
                 }
-
                 @Override
                 public FieldExpression visit(On on) {
-                    return new On(mapDayOfWeek(sourceDef, targetDef, on.getTime()), on.getSpecialChar(),  on.getNth());
-                }
+                    return new On(mapping.mapValue(on.getTime()), on.getSpecialChar(), on.getNth());
 
+                }
                 @Override
                 public FieldExpression visit(Between between) {
-                    return new Between(mapDayOfWeek(sourceDef, targetDef, between.getFrom()), mapDayOfWeek(sourceDef, targetDef, between.getTo()));
-                }
+                    return new Between(
+                            mapping.mapValue(between.getFrom()),
+                            mapping.mapValue(between.getTo())
 
+                    );
+                }
                 @Override
                 public FieldExpression visit(And and) {
                     And newAnd = new And();
@@ -320,11 +313,13 @@ public class CronMapper {
                 }
             });
 
-            if (expression instanceof QuestionMark && !targetDef.getConstraints().getSpecialChars().contains(SpecialChar.QUESTION_MARK)) {
+            if (expression instanceof QuestionMark && !mapping.targetSupportsQuestionMark()) {
+                //
                 dest = always();
             }
-            return new CronField(CronFieldName.DAY_OF_WEEK, dest, targetDef.getConstraints());
 
+            return new CronField(CronFieldName.DAY_OF_WEEK, dest, mapping.getTargetConstraints());
+            //
         };
     }
 
