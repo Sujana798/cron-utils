@@ -634,65 +634,79 @@ public class SingleExecutionTime implements ExecutionTime {
      * @return true if date matches cron expression requirements, false otherwise.
      */
     public boolean isMatch(ZonedDateTime date) {
-        // Issue #200: Truncating the date to the least granular precision supported by different cron systems.
-        // For Quartz, it's seconds while for Unix & Cron4J it's minutes.
-        final boolean isSecondGranularity = cronDefinition.containsFieldDefinition(SECOND);
-        // For Quartz-like crons (those with seconds, year, and day of week), we allow nanoseconds
-        final boolean isQuartzLike = isSecondGranularity && 
-            cronDefinition.containsFieldDefinition(YEAR) && 
-            cronDefinition.containsFieldDefinition(DAY_OF_WEEK);
-        if (isSecondGranularity) {
-            if (!isQuartzLike && date.getNano() > 0) {
-                return false;
-            }
-            date = date.truncatedTo(SECONDS);
-        } else {
-            // For non-second crons, we require seconds to be 0
-            if (date.getSecond() != 0) {
-                return false;
-            }
-            // Check if the minute matches one of our values before checking nanoseconds
-            ZonedDateTime truncated = date.truncatedTo(ChronoUnit.MINUTES);
-            boolean matches = dateValuesInExpectedRanges(truncated, truncated);
-            if (!matches) {
-                return false;
-            }
-            // If we match the minute, then we require nanoseconds to be 0
-            if (date.getNano() != 0) {
-                return false;
-            }
-            date = truncated;
+        date = normalizeDateForMatching(date);
+        if (date == null) {
+            return false;
         }
-
-        final Optional<ZonedDateTime> last = lastExecution(date);
-        if (last.isPresent()) {
-            final Optional<ZonedDateTime> next = nextExecution(last.get());
-            if (next.isPresent()) {
-                return next.get().equals(date);
-            } else {
-                boolean everythingInRange = false;
-                try {
-                    everythingInRange = dateValuesInExpectedRanges(nextClosestMatch(date), date);
-                } catch (final NoSuchValueException ignored) {
-                    // Why is this ignored?
-                }
-                try {
-                    everythingInRange = dateValuesInExpectedRanges(previousClosestMatch(date), date);
-                } catch (final NoSuchValueException ignored) {
-                    // Why is this ignored?
-                }
-                return everythingInRange;
-            }
-        } else {
-            try {
-                return dateValuesInExpectedRanges(nextClosestMatch(date.minusSeconds(1)), date);
-            } catch (final NoSuchValueException ignored) {
-                // Why is this ignored?
-            }
-        }
-        return false;
+        return matchesExecutionTime(date);
     }
 
+    private ZonedDateTime normalizeDateForMatching(ZonedDateTime date) {
+        final boolean isSecondGranularity = cronDefinition.containsFieldDefinition(SECOND);
+        final boolean isQuartzLike = isSecondGranularity
+                && cronDefinition.containsFieldDefinition(YEAR)
+                && cronDefinition.containsFieldDefinition(DAY_OF_WEEK);
+
+        if (isSecondGranularity) {
+            if (!isQuartzLike && date.getNano() > 0) {
+                return null;
+            }
+            return date.truncatedTo(SECONDS);
+        }
+
+        if (date.getSecond() != 0) {
+            return null;
+        }
+
+        ZonedDateTime truncated = date.truncatedTo(ChronoUnit.MINUTES);
+
+        if (!dateValuesInExpectedRanges(truncated, truncated)) {
+            return null;
+        }
+
+        if (date.getNano() != 0) {
+            return null;
+        }
+
+        return truncated;
+    }
+
+    private boolean matchesExecutionTime(ZonedDateTime date) {
+        final Optional<ZonedDateTime> last = lastExecution(date);
+
+        if (last.isPresent()) {
+            final Optional<ZonedDateTime> next = nextExecution(last.get());
+
+            if (next.isPresent()) {
+                return next.get().equals(date);
+            }
+
+            boolean everythingInRange = false;
+
+            try {
+                everythingInRange =
+                        dateValuesInExpectedRanges(nextClosestMatch(date), date);
+            } catch (final NoSuchValueException ignored) {
+            }
+
+            try {
+                everythingInRange =
+                        dateValuesInExpectedRanges(previousClosestMatch(date), date);
+            } catch (final NoSuchValueException ignored) {
+            }
+
+            return everythingInRange;
+        }
+
+        try {
+            return dateValuesInExpectedRanges(
+                    nextClosestMatch(date.minusSeconds(1)),
+                    date
+            );
+        } catch (final NoSuchValueException ignored) {
+            return false;
+        }
+    }
     private boolean dateValuesInExpectedRanges(final ZonedDateTime validCronDate, final ZonedDateTime date) {
         boolean everythingInRange = true;
         if (cronDefinition.getFieldDefinition(YEAR) != null) {
