@@ -56,6 +56,11 @@ public class SingleExecutionTime implements ExecutionTime {
 
     private static final LocalTime MAX_SECONDS = LocalTime.MAX.truncatedTo(SECONDS);
 
+    private enum Direction {
+        NEXT,
+        PREVIOUS
+    }
+
     private final CronDefinition cronDefinition;
     private final FieldValueGenerator yearsValueGenerator;
     private final CronField daysOfWeekCronField;
@@ -262,10 +267,13 @@ public class SingleExecutionTime implements ExecutionTime {
         return getNextPotentialValue(date, seconds, ChronoField.SECOND_OF_MINUTE);
     }
 
-    private static ExecutionTimeResult getNextPotentialValue(
+    private static ExecutionTimeResult getPotentialValue(
             final ZonedDateTime date,
             final TimeNode node,
-            final TemporalField field) throws NoSuchValueException {
+            final TemporalField field,
+            final Direction direction)
+            throws NoSuchValueException {
+
         Set<Integer> values = new HashSet<>(node.values);
 
         TemporalUnit unit = field.getBaseUnit();
@@ -275,19 +283,33 @@ public class SingleExecutionTime implements ExecutionTime {
         long range = maximum - minimum;
 
         ZonedDateTime newDate = date;
+
         for (long i = 0; i < 2 * range; i++) {
-            newDate = newDate.plus(1, unit);
+
+            newDate = direction == Direction.NEXT
+                    ? newDate.plus(1, unit)
+                    : newDate.minus(1, unit);
 
             if (values.contains(newDate.get(field))) {
-                newDate = newDate
-                        .truncatedTo(unit);
+
+                if (direction == Direction.NEXT) {
+                    newDate = newDate.truncatedTo(unit);
+                } else {
+                    newDate = newDate.truncatedTo(unit)
+                            .plus(1, unit)
+                            .minusSeconds(1);
+                }
+
                 return new ExecutionTimeResult(newDate, false);
             }
         }
 
         throw new NoSuchValueException();
     }
+    private static ExecutionTimeResult getNextPotentialValue(final ZonedDateTime date, final TimeNode node, final TemporalField field) throws NoSuchValueException {
 
+        return getPotentialValue(date, node, field, Direction.NEXT);
+    }
     private ZonedDateTime toBeginOfNextMonth(final ZonedDateTime datetime) {
         return datetime.truncatedTo(DAYS).plusMonths(1).withDayOfMonth(1);
     }
@@ -482,32 +504,9 @@ public class SingleExecutionTime implements ExecutionTime {
         return getPreviousPotentialValue(date, seconds, ChronoField.SECOND_OF_MINUTE);
     }
 
-    private static ExecutionTimeResult getPreviousPotentialValue(
-            final ZonedDateTime date,
-            final TimeNode node,
-            final TemporalField field) throws NoSuchValueException {
-        Set<Integer> values = new HashSet<>(node.values);
+    private static ExecutionTimeResult getPreviousPotentialValue(final ZonedDateTime date, final TimeNode node, final TemporalField field) throws NoSuchValueException {
 
-        TemporalUnit unit = field.getBaseUnit();
-
-        long maximum = field.range().getMaximum();
-        long minimum = field.range().getMinimum();
-        long range = maximum - minimum;
-
-        ZonedDateTime newDate = date;
-        for (long i = 0; i < 2 * range; i++) {
-            newDate = newDate.minus(1, unit);
-
-            if (values.contains(newDate.get(field))) {
-                newDate = newDate
-                        .truncatedTo(unit)
-                        .plus(1, unit)
-                        .minusSeconds(1);
-                return new ExecutionTimeResult(newDate, false);
-            }
-        }
-
-        throw new NoSuchValueException();
+        return getPotentialValue(date, node, field, Direction.PREVIOUS);
     }
 
     private ZonedDateTime toEndOfPreviousMonth(final ZonedDateTime datetime) {
@@ -735,24 +734,28 @@ public class SingleExecutionTime implements ExecutionTime {
         return everythingInRange;
     }
 
+    private List<Integer> generateSortedDistinctCandidates(List<Integer> candidates) {
+        return candidates.stream().distinct().sorted().collect(Collectors.toList());
+    }
+
     private List<Integer> generateDayCandidatesQuestionMarkNotSupportedUsingDoWAndDoM(final int year, final int month, final WeekDay mondayDoWValue) {
         final LocalDate date = LocalDate.of(year, month, 1);
         final int lengthOfMonth = date.lengthOfMonth();
         if (daysOfMonthCronField.getExpression() instanceof Always && daysOfWeekCronField.getExpression() instanceof Always) {
-            return createDayOfMonthValueGeneratorInstance(daysOfMonthCronField, year, month)
-                    .generateCandidates(1, lengthOfMonth)
-                    .stream().distinct().sorted()
-                    .collect(Collectors.toList());
+            return generateSortedDistinctCandidates(
+                    createDayOfWeekValueGeneratorInstance(daysOfWeekCronField, year, month, mondayDoWValue)
+                            .generateCandidates(1, lengthOfMonth)
+            );
         } else if (daysOfMonthCronField.getExpression() instanceof Always) {
-            return createDayOfWeekValueGeneratorInstance(daysOfWeekCronField, year, month, mondayDoWValue)
-                    .generateCandidates(1, lengthOfMonth)
-                    .stream().distinct().sorted()
-                    .collect(Collectors.toList());
+            return generateSortedDistinctCandidates(
+                    createDayOfWeekValueGeneratorInstance(daysOfWeekCronField, year, month, mondayDoWValue)
+                            .generateCandidates(1, lengthOfMonth)
+            );
         } else if (daysOfWeekCronField.getExpression() instanceof Always) {
-            return createDayOfMonthValueGeneratorInstance(daysOfMonthCronField, year, month)
-                    .generateCandidates(1, lengthOfMonth)
-                    .stream().distinct().sorted()
-                    .collect(Collectors.toList());
+            return generateSortedDistinctCandidates(
+                    createDayOfMonthValueGeneratorInstance(daysOfMonthCronField, year, month)
+                            .generateCandidates(1, lengthOfMonth)
+            );
         } else {
             final List<Integer> dayOfWeekCandidates = createDayOfWeekValueGeneratorInstance(daysOfWeekCronField,
                     year, month, mondayDoWValue).generateCandidates(1, lengthOfMonth);
@@ -774,22 +777,22 @@ public class SingleExecutionTime implements ExecutionTime {
 
     private List<Integer> generateDayCandidatesQuestionMarkSupportedUsingDoWAndDoM(final int year, final int month, final WeekDay mondayDoWValue) {
         final LocalDate date = LocalDate.of(year, month, 1);
-        final int lengthOfMonth = date.lengthOfMonth();
+        final int lengthOfMonth = getLengthOfMonth(year, month);
         if (daysOfMonthCronField.getExpression() instanceof Always && daysOfWeekCronField.getExpression() instanceof Always) {
-            return createDayOfMonthValueGeneratorInstance(daysOfMonthCronField, year, month)
-                    .generateCandidates(1, lengthOfMonth)
-                    .stream().distinct().sorted()
-                    .collect(Collectors.toList());
+            return generateSortedDistinctCandidates(
+                    createDayOfMonthValueGeneratorInstance(daysOfMonthCronField, year, month)
+                            .generateCandidates(1, lengthOfMonth)
+            );
         } else if (daysOfMonthCronField.getExpression() instanceof QuestionMark) {
-            return createDayOfWeekValueGeneratorInstance(daysOfWeekCronField, year, month, mondayDoWValue)
-                    .generateCandidates(1, lengthOfMonth)
-                    .stream().distinct().sorted()
-                    .collect(Collectors.toList());
+            return generateSortedDistinctCandidates(
+                    createDayOfWeekValueGeneratorInstance(daysOfWeekCronField, year, month, mondayDoWValue)
+                            .generateCandidates(1, lengthOfMonth)
+            );
         } else if (daysOfWeekCronField.getExpression() instanceof QuestionMark) {
-            return createDayOfMonthValueGeneratorInstance(daysOfMonthCronField, year, month)
-                    .generateCandidates(1, lengthOfMonth)
-                    .stream().distinct().sorted()
-                    .collect(Collectors.toList());
+            return generateSortedDistinctCandidates(
+                    createDayOfMonthValueGeneratorInstance(daysOfMonthCronField, year, month)
+                            .generateCandidates(1, lengthOfMonth)
+            );
         } else {
             Set<Integer> candidates = new HashSet<>(createDayOfMonthValueGeneratorInstance(daysOfMonthCronField, year, month).generateCandidates(1, lengthOfMonth));
             Set<Integer> daysOfWeek = new HashSet<>(createDayOfWeekValueGeneratorInstance(daysOfWeekCronField, year, month, mondayDoWValue).generateCandidates(1, lengthOfMonth));
@@ -797,6 +800,10 @@ public class SingleExecutionTime implements ExecutionTime {
             candidates.retainAll(daysOfWeek);
             return candidates.stream().sorted().collect(Collectors.toList());
         }
+    }
+
+    private int getLengthOfMonth(int year, int month) {
+        return LocalDate.of(year, month, 1).lengthOfMonth();
     }
 
     private Optional<TimeNode> generateDayCandidatesUsingDoM(final ZonedDateTime reference) {
